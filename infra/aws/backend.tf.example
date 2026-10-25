@@ -1,0 +1,12 @@
+# Copy to backend.tf before the first terraform init/apply.
+# Create the S3 bucket separately and enable versioning/encryption first.
+# Replace the bucket name and region; state key may remain as shown.
+terraform {
+  backend "s3" {
+    bucket       = "REPLACE_WITH_PRIVATE_STATE_BUCKET"
+    key          = "kthok/prod/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+}

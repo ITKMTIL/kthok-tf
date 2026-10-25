@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and replace these example values.
+region             = "us-east-1"
+availability_zones = ["us-east-1a", "us-east-1b"]
+root_domain        = "k-thok.space"
+# Leave hosted_zone_id unset so Terraform creates the public Route 53 zone.
+# If you already have a public zone, set hosted_zone_id = "Z..." instead.
+site_domain        = "k-thok.space"
+api_domain         = "api.k-thok.space"
+google_client_id   = "REPLACE_WITH_GOOGLE_WEB_CLIENT_ID"
+
+# Restricted Vocareum/AWS Academy labs may deny iam:CreateRole. If the
+# pre-existing LabRole has the required permissions, set its ARN here.
+# existing_lab_role_arn = "arn:aws:iam::ACCOUNT_ID:role/LabRole"
+
+# Keep false for the first apply. Set true after images, secrets and migration.
+enable_services   = false
+client_image_tag  = "REPLACE_WITH_GIT_SHA"
+core_image_tag    = "REPLACE_WITH_GIT_SHA"
+migrate_image_tag = "REPLACE_WITH_GIT_SHA-migrate"
