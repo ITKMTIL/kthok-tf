@@ -17,6 +17,42 @@ Terraform creates one VPC in two AZs, an internet-facing ALB with HTTPS, Route 5
 
 The full-resolution diagram is stored in [`architecture/K-thok-CloudArchitect.png`](architecture/K-thok-CloudArchitect.png).
 
+### How the components connect
+
+1. **Build and deployment:** Developers obtain `kthok-client` and `kthok-core` from GitHub. Docker builds the client image and the core runtime and migration images from their Dockerfiles, then pushes them to the two Amazon ECR repositories. Terraform creates the AWS resources and registers ECS task definitions that refer to specific ECR image tags. Pushing an image alone does not update a running service; a reviewed Terraform plan and apply updates the task definition and service. The migration image shares the core ECR repository and runs as a one-off ECS task when database migrations are needed.
+2. **DNS and secure entry:** Namecheap delegates `k-thok.space` to the Route 53 hosted zone. Route 53 alias records for `k-thok.space` and `api.k-thok.space` both point to the same public Application Load Balancer (ALB). The ALB sits in the two public subnets, which route internet traffic through the VPC's internet gateway. Port 80 redirects to 443. On port 443, the ALB uses an ACM certificate validated by Route 53 DNS records. The regional AWS WAF is associated with the ALB and evaluates requests there; it is not a separate network hop.
+3. **Routing to the application:** The ALB selects a target group by the HTTPS request's `Host` header. `k-thok.space` goes to the client target group on HTTP port 3000; `api.k-thok.space` goes to the core target group on HTTP port 3001. The client serves the Next.js site, including `/admin`. The browser's API and Socket.IO calls use `api.k-thok.space` and reach the core through the same ALB. TLS ends at the ALB; the ALB-to-container target group connections are HTTP inside the VPC. Security groups allow the ALB to reach only the corresponding application ports.
+4. **Private compute and outbound traffic:** ECS Fargate runs the client and core tasks in private application subnets across two Availability Zones. The configuration requests three client tasks and one core task when `enable_services = true`. Neither service has a public IP. Each application subnet routes outbound internet traffic through the NAT gateway in its own AZ, then through the internet gateway. This outbound route lets tasks pull ECR images and reach AWS service endpoints; user requests enter through the ALB, not through NAT. The two database subnets have no default internet route.
+5. **Data, secrets, and permissions:** Only the core security group can connect to PostgreSQL on TCP 5432. RDS is private and Multi-AZ: AWS manages the primary, standby, replication, and failover behind one database endpoint. The core and migration tasks receive the RDS connection details and master credential, while the core also receives session and user-hash secrets from Secrets Manager. Their ECS execution role lets AWS pull images, read injected secrets, and send logs. In this Learner Lab deployment, the pre-existing `LabRole` is reused because the lab denied creation of new IAM roles; `kthok-tf/.env` credentials authorize deployment commands on the local computer, not the running website.
+6. **Observability and recovery:** ECS sends client, core, and migration logs to CloudWatch log groups; ECS Container Insights is enabled for the cluster, and WAF publishes CloudWatch metrics with request sampling enabled. AWS Backup selects the RDS instance for a daily backup plan and stores recovery points in a backup vault. ACM, CloudWatch, Secrets Manager, IAM, and AWS Backup are supporting services, rather than destinations in the user request path.
+
+The diagram shows the **running** topology. When `enable_services = false`, the client and core ECS services are absent, so the ALB has no application targets and the site is unavailable even though the remaining infrastructure still exists.
+
+### Component summary
+
+| Component | Connection and role in this project |
+| --- | --- |
+| GitHub repositories | Hold the client and core source; developers fetch them before building images. |
+| Docker | Builds `linux/amd64` client, core, and migration container images and pushes them to ECR. |
+| Terraform | Creates and updates AWS infrastructure and ECS image references from the `.tf` files and `terraform.tfvars`. |
+| IAM / LabRole | The Learner Lab identity authorizes Terraform and AWS CLI calls. ECS execution and AWS Backup reuse the lab's pre-existing `LabRole` for their service permissions. |
+| ECR | Stores `kthok-client` and `kthok-core` images; the migration tag is also stored in `kthok-core`. ECS pulls the selected tags. |
+| Route 53 | Resolves the site and API names to the ALB and holds ACM DNS validation records. |
+| ACM | Issues the certificate presented by the ALB for the site and API hostnames. |
+| AWS WAF | Evaluates requests at the ALB using common rules and an IP rate rule. |
+| VPC and Availability Zones | Provide one `10.0.0.0/16` network with public, private app, and private DB subnets across two AZs. |
+| Public subnets and internet gateway | Place the internet-facing ALB and NAT gateways; their route table connects to the internet gateway. |
+| ALB and target groups | Terminate HTTPS and route the site hostname to port 3000 and API hostname to port 3001. |
+| Private application subnets and NAT gateways | Host Fargate tasks without public IPs; each app subnet uses its AZ's NAT gateway for outbound traffic. |
+| Security groups | Limit public entry to ALB ports 80/443, ALB-to-app traffic to 3000/3001, and core-to-RDS traffic to 5432. |
+| ECS Fargate client service | Runs three Next.js tasks serving the website when enabled. |
+| ECS Fargate core service | Runs one NestJS and Socket.IO task serving the API when enabled. |
+| ECS migration task | Runs Prisma migrations from the core repository's migration image as needed; it is not a continuously running service. |
+| Private database subnets and RDS | Place the non-public Multi-AZ PostgreSQL instance; only core and migration tasks can connect through the core security group. |
+| Secrets Manager | Holds session and user-hash secrets and the RDS-managed master credential injected into tasks. |
+| CloudWatch | Collects ECS logs and operational metrics, including Container Insights and WAF metrics. |
+| AWS Backup and backup vault | Runs the RDS backup plan and retains its recovery points. |
+
 ## Where to work and what to keep private
 
 - Run `terraform init`, `plan`, `show`, `apply`, and `output` from `kthok-tf/`. Do not run Terraform from the former `infra/aws` path. From the parent `kthok/` directory, use `terraform -chdir=kthok-tf ...`.
