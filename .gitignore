@@ -1,0 +1,12 @@
+.terraform/
+darwin_arm64/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+*.tfplan
+crash.log
+crash.*.log
+.env
+.env.*
+!.env.example
