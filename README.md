@@ -11,6 +11,12 @@ kthok/
 
 Terraform creates one VPC in two AZs, an internet-facing ALB with HTTPS, Route 53, ACM, WAF, two private Fargate workloads, ECR, private Multi-AZ RDS PostgreSQL, Secrets Manager, CloudWatch, and AWS Backup. The frontend has **three fixed tasks**; the backend has **one fixed task** because chat and Socket.IO state are in its memory. Docker builds the application images locally and pushes them to ECR; Terraform then points ECS task definitions at those ECR tags. No application source files need to be edited for this infrastructure workflow.
 
+## Cloud architecture
+
+![K-Thok AWS cloud architecture showing Terraform, Docker, ECR, ECS Fargate, ALB, networking, and RDS](architecture/K-thok-CloudArchitect.png)
+
+The full-resolution diagram is stored in [`architecture/K-thok-CloudArchitect.png`](architecture/K-thok-CloudArchitect.png).
+
 ## Where to work and what to keep private
 
 - Run `terraform init`, `plan`, `show`, `apply`, and `output` from `kthok-tf/`. Do not run Terraform from the former `infra/aws` path. From the parent `kthok/` directory, use `terraform -chdir=kthok-tf ...`.
